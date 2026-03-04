@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Simulation</title>
+    <style>
+        /* CSS Styling */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling scrollbars */
+            background-color: #1a1a2e; /* Dark, modern background */
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        /* Ensure the canvas takes up standard block space */
+        canvas {
+            display: block;
+        }
+        
+        /* Floating instructions box */
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7); /* Semi-transparent black */
+            padding: 15px 20px;
+            border-radius: 8px;
+            pointer-events: none; /* Allows mouse clicks to pass through to the canvas underneath */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        #instructions h1 {
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+            color: #e94560; /* Highlight color */
+        }
+        
+        #instructions p {
+            margin: 5px 0;
+            font-size: 0.95rem;
+            color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- On-screen UI -->
+    <div id="instructions">
+        <h1>Gravity Simulator</h1>
+        <p>Click anywhere to spawn a new ball.</p>
+        <p>Watch them fall and bounce with real physics!</p>
+    </div>
+
+    <!-- The HTML5 Canvas element where we will draw our simulation -->
+    <canvas id="simulationCanvas"></canvas>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // 1. Setup the Canvas Environment
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d'); // Gets the 2D rendering context
+
+        // Make the canvas fill the entire browser window
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Ensure the canvas resizes properly if the user changes the window size
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            init(); // Re-initialize the setup on resize
+        });
+
+        // 2. Define Physics Constants
+        const GRAVITY = 0.8;    // The downward acceleration applied every frame
+        const FRICTION = 0.75;  // Energy retained when bouncing (0 to 1). 0.75 means it loses 25% energy per bounce.
+
+        // Array of modern hex colors to pick from randomly
+        const colors = ['#e94560', '#0f3460', '#43d8c9', '#f9ed69', '#ff9a76'];
+
+        function randomColor() {
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        // 3. Create the Ball Object Class
+        // Using a class makes it easy to create hundreds of independent balls
+        class Ball {
+            constructor(x, y, dx, dy, radius, color) {
+                this.x = x;           // X coordinate position
+                this.y = y;           // Y coordinate position
+                this.dx = dx;         // Velocity on the X axis (horizontal speed)
+                this.dy = dy;         // Velocity on the Y axis (vertical speed)
+                this.radius = radius; // Size of the ball
+                this.color = color;   // Fill color
+            }
+
+            // Method to render the ball onto the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false); // Draws a full circle
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // Method to calculate new position based on physics, then draw it
+            update() {
+                // Bottom Collision Logic
+                // If the ball's bottom edge (y + radius) plus its next movement (dy) goes past the canvas height
+                if (this.y + this.radius + this.dy > canvas.height) {
+                    // Reverse the Y velocity to make it bounce UP, and multiply by friction to lose energy
+                    this.dy = -this.dy * FRICTION;
+                    
+                    // Stop it from sinking into the floor completely
+                    this.y = canvas.height - this.radius; 
+                    
+                    // Slow down horizontal movement slightly when sliding on the floor (ground friction)
+                    this.dx = this.dx * 0.98; 
+                } else {
+                    // If it's in the air, gravity constantly pulls it down by increasing positive Y velocity
+                    this.dy += GRAVITY;
+                }
+
+                // Wall Collision Logic (Left and Right bounds)
+                if (this.x + this.radius + this.dx > canvas.width || this.x - this.radius <= 0) {
+                    // Reverse X velocity to bounce off walls
+                    this.dx = -this.dx * FRICTION;
+                }
+
+                // Update the actual position properties by adding the current velocities
+                this.x += this.dx;
+                this.y += this.dy;
+
+                // Finally, draw the ball at its new coordinates
+                this.draw();
+            }
+        }
+
+        // 4. Manage the State of the Simulation
+        let ballArray = []; // Stores all active ball objects
+
+        // Function to set up the initial scene
+        function init() {
+            ballArray = [];
+            
+            // Spawn 20 random balls to start out
+            for (let i = 0; i < 20; i++) {
+                let radius = Math.random() * 20 + 10; // Random size between 10 and 30px
+                
+                // Ensure they don't spawn stuck inside the walls
+                let x = Math.random() * (canvas.width - radius * 2) + radius;
+                let y = Math.random() * (canvas.height / 2); // Start mostly in the top half
+                
+                let dx = (Math.random() - 0.5) * 10; // Random horizontal speed (-5 to 5)
+                let dy = Math.random() * 5;          // Random downward speed
+
+                // Push new ball instance into our holding array
+                ballArray.push(new Ball(x, y, dx, dy, radius, randomColor()));
+            }
+        }
+
+        // 5. The Main Animation Loop
+        function animate() {
+            // Tells the browser to run this function again before the next repaint (~60fps)
+            requestAnimationFrame(animate); 
+            
+            // Clear the previous frame. 
+            // Instead of standard clearRect, we draw a semi-transparent rectangle over everything.
+            // This creates a really cool "motion blur" trailing effect on moving objects.
+            ctx.fillStyle = 'rgba(26, 26, 46, 0.4)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Iterate through every ball in our array and call its update method
+            for (let i = 0; i < ballArray.length; i++) {
+                ballArray[i].update();
+            }
+        }
+
+        // 6. User Interaction
+        // Listen for mouse clicks
+        window.addEventListener('click', (event) => {
+            // Generate random properties for the new ball
+            let radius = Math.random() * 25 + 10;
+            let dx = (Math.random() - 0.5) * 12; // Explosive horizontal speed
+            let dy = (Math.random() - 0.5) * 12; // Can even shoot upwards initially
+            
+            // Create a new ball exactly at the mouse click coordinates (event.clientX/Y)
+            ballArray.push(new Ball(event.clientX, event.clientY, dx, dy, radius, randomColor()));
+        });
+
+        // 7. Kickoff!
+        init();     // Populate initial balls
+        animate();  // Start the perpetual animation loop
+
+    </script>
+</body>
+</html>
